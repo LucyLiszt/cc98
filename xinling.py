@@ -4,14 +4,19 @@ from EasyLogin import EasyLogin#假设已经pip install bs4 requests pymysql
 from time import sleep
 from bs4 import BeautifulSoup
 from mpms import MultiProcessesMultiThreads#假设mpms正常工作
-from config import COOKIE,db,myip
-import socket
-real_create_conn = socket.create_connection
-def set_src_addr(*args):
-    address, timeout = args[0], args[1]
-    source_address = (myip, 0)
-    return real_create_conn(address, timeout, source_address)
-socket.create_connection = set_src_addr #for multiple ip support
+from config import COOKIE,db,enable_multiple_ip
+from pprint import pprint,pformat
+if enable_multiple_ip:
+    import socket
+    from config import myip
+    real_create_conn = socket.create_connection
+    def set_src_addr(*args):
+        address, timeout = args[0], args[1]
+        source_address = (myip, 0)
+        return real_create_conn(address, timeout, source_address)
+    socket.create_connection = set_src_addr #for multiple ip support
+else:
+    myip = ""
 import requests,sys,pymysql,re,os
 
 DOMAIN = "http://www.cc98.org"#假设当前网络能访问到本域名
@@ -178,9 +183,9 @@ def handler(meta,boardid,id,result,big):
         handler(meta,boardid,id,result[1000:],big)
         result=result[:1000]
     try:
-        print(myip,boardid,id,result[0][2],len(result))
+        print(" ".join(str(i) for i in (boardid,id,result[0][2],len(result))))
     except:
-        print(boardid,id,">>>Cannot Print<<<",len(result))
+        print(" ".join(str(i) for i in (boardid,id,pformat(result[0][2]),len(result))))
     global conn
     sql = "insert ignore into {}bbs_{}(id,lc,user,content,posttime,edittime,gettime) values ".format(big,boardid)
     for i in result:
@@ -269,6 +274,13 @@ def main():
     #spyBoard(boardid=182,spytimes=1)
 ##GetHotPost
     #print(getHotPost())
+
+def test(boardid=182,id=4702474,big=""):
+    from pprint import pprint
+    result = getBBS(boardid,id,big)
+    pprint(result)
+    meta = {}
+    handler(meta,*result)
 
 if __name__ == "__main__": 
     if len(sys.argv)>1 and sys.argv[1]=="test":

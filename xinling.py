@@ -121,7 +121,7 @@ def getBoardPage(boardid,page):
         result.add(getPart(i,"&ID=","&"))#假设帖子列表中的<a href='dispbbs.asp?boardID=326&ID=4593133&star=1&page=1'>
     return [(boardid,i) for i in result]
 
-def getBBS(boardid,id,big):
+def getBBS(boardid,id,big, morehint=False):
     #print(id)
     a = EasyLogin(cookie=COOKIE)
     result = []
@@ -133,8 +133,13 @@ def getBBS(boardid,id,big):
         return [boardid,id,[],big]
     pages = (number//10 + 1) if number%10 !=0 else number//10#假设每页只有10个楼层
     lastpage = number - 10*(pages-1)
-    for star in range(1,pages+1):
+    startpage = 1
+    if morehint==False and pages>100:
+        startpage = pages-10
+    for star in range(startpage, pages+1):
         if star!=1:
+            if morehint:
+                print("page {star}".format(star=star))
             a.get("{}/dispbbs.asp?BoardID={}&id={}&star={}".format(DOMAIN,boardid,id,star))
         else:
             title = a.b.title.text.strip(" » CC98论坛")#帖子标题使用页面标题，假设页面标题的格式为"title &raquo; CC98论坛"
@@ -161,12 +166,12 @@ def getBBS(boardid,id,big):
 
             lastedittime = " ".join(lastedit.text.split()[-2:]).replace("/","-") if lastedit != None else "1970-01-01 08:00:01"#没有编辑就返回0
             #print(lastedittime)
-            posttime = table.find_next("td",attrs={"align":"center"}).get_text(strip=True).replace("/","-")#发帖时间，注意find_next有可能找到下个楼层，希望没错			<td class="tablebody1" valign="middle" align="center" width="175">
+            posttime = table.find_next("td",attrs={"align":"center"}).get_text(strip=True).replace("/","-")#发帖时间，注意find_next有可能找到下个楼层，希望没错         <td class="tablebody1" valign="middle" align="center" width="175">
             #假设发帖时间的HTML：
-            #				<a href=#>
-            #				<img align="absmiddle" border="0" width="13" height="15" src="pic/ip.gif" title="点击查看用户来源及管理&#13发贴IP：*.*.*.*"></a>
-            #		2016/10/28 21:32:45
-            #			</td>
+            #               <a href=#>
+            #               <img align="absmiddle" border="0" width="13" height="15" src="pic/ip.gif" title="点击查看用户来源及管理&#13发贴IP：*.*.*.*"></a>
+            #       2016/10/28 21:32:45
+            #           </td>
 
             #print(posttime)
             contentdiv = table.find('article').find('div')
@@ -232,7 +237,7 @@ def spyNew(sleeptime=300,processes=5,threads=4):
     m = MultiProcessesMultiThreads(getBBS,handler,processes=processes,threads_per_process=threads)
     t = 0
     workload = []
-    thenew=getHotPost()+getNewPost()+getBoardPage(182,1)+getBoardPage(100,1)
+    thenew=getHotPost()+getNewPost()+getBoardPage(182,1)+getBoardPage(758,1)
     for boardid,i in thenew:
             boardid,i = int(boardid),int(i)
             if [boardid,i] not in workload:

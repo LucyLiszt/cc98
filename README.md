@@ -57,6 +57,16 @@ myip='10.1.2.{}'.format(random.randint(66,99))  #randomly choose a source ip for
 
     python3 xinling.py 100 #get all post in "校园信息"
 
+### 如何更好地查询数据库
+
+如果你按上述方式运行，将得到一系列的形如`bbs_100`的表，每个表包含最新的发帖
+
+但在长时间运行后，`bbs_100`表将愈发庞大，插入新数据耗时将会增加(利用主键冲突来避免重复数据,每插入一条数据都会需要查索引)，也不利于执行最新数据分析
+
+我的方法是周期性将历史数据转移到`bigbbs_100`, 然后将所有的`bigbbs`表使用Mysql的MRG_MyISAM引擎来建立联合大表`data`，在`data`表中就可以进行全站搜索了
+
+具体代码和用到的SQL参见[update_big_data.py](update_big_data.py)
+
 ## Note
 
 [EasyLogin是本项目的基础项目](https://github.com/zjuchenyuan/EasyLogin) ←_← 还不快戳戳，求Star咯

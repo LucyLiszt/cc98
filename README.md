@@ -57,7 +57,7 @@ myip='10.1.2.{}'.format(random.randint(66,99))  #randomly choose a source ip for
 
     python3 xinling.py 100 #get all post in "校园信息"
 
-### 如何更好地查询数据库
+### 如何更好地全站搜索
 
 如果你按上述方式运行，将得到一系列的形如`bbs_100`的表，每个表包含最新的发帖
 

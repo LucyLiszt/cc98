@@ -184,7 +184,10 @@ def handler(meta,boardid,id,result,big):
     try:
         print(" ".join(str(i) for i in (boardid,id,result[0][2],len(result))))
     except:
-        print(" ".join(str(i) for i in (boardid,id,pformat(result[0][2]),len(result))))
+        try:
+            print(" ".join(str(i) for i in (boardid,id,pformat(result[0][2]),len(result))))
+        except:
+            print("Something cannot print")
     global conn
     sql = "insert ignore into {}bbs_{}(id,lc,user,content,posttime,edittime,gettime) values ".format(big,boardid)
     for i in result:
@@ -230,12 +233,12 @@ def spyBoard(boardid=182,pages_input=None,sleeptime=86400,processes=2,threads=2)
 def spyNew(sleeptime=300,processes=5,threads=4):
     m = MultiProcessesMultiThreads(getBBS,handler,processes=processes,threads_per_process=threads)
     t = 0
-    workload = []
+    workload = set([])
     thenew=getHotPost()+getNewPost()+getBoardPage(182,1)+getBoardPage(758,1)
     for boardid,i in thenew:
             boardid,i = int(boardid),int(i)
-            if [boardid,i] not in workload:
-                workload.append([boardid,i])
+            if (boardid,i) not in workload:
+                workload.add((boardid,i))
                 m.put([boardid,i,""])
     sleep(sleeptime)
     m.close()
@@ -284,9 +287,14 @@ def test(boardid=182,id=4702474,big=""):
     handler(meta,*result)
 
 if __name__ == "__main__": 
-    if len(sys.argv)>1 and sys.argv[1]=="test":
-        test()
-    else:
-        main()
+    try:
+        if len(sys.argv)>1 and sys.argv[1]=="test":
+            test()
+        else:
+            main()
+    except KeyboardInterrupt:
         print("Quit!!!")
-    os._exit(1)
+        os._exit(1) # Attention! this does not terminate child process!
+    finally:
+        print("Quit!!!")
+        os._exit(0)

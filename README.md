@@ -26,7 +26,7 @@ Python3
 
 3. enable_multiple_ip: boolean, 是否启用多IP功能；仅能在Linux下启用
 
-4. myip: 本次运行的ip，如果不需要启用多IP功能可以不写，否则需要提供一个系统现在已经获取的IP
+4. myip: 本次运行的ip，如果不需要启用多IP功能可以不提供，否则需要提供一个系统现在已经获取的IP
 
 这是一个config.py的例子：
 
@@ -51,6 +51,7 @@ myip='10.1.2.{}'.format(random.randint(66,99))  #randomly choose a source ip for
     while [ '1' = '1' ]; do python3 xinling.py; done
     # Press Ctrl+A C
     while [ '1' = '1' ]; do date; killall python3; sleep 666; done
+    # 关于screen，这里有一篇很好的教程：https://www.ibm.com/developerworks/cn/linux/l-cn-screen/index.html
 
 不带参数地运行就会抓取十大+最新发帖，指定一个版块ID的参数则会抓取本版块所有发帖
 

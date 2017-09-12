@@ -182,7 +182,10 @@ def handler(meta,boardid,id,result,big):
         handler(meta,boardid,id,result[1000:],big)
         result=result[:1000]
     try:
-        print(" ".join(str(i) for i in (boardid,id,result[0][2],len(result))))
+        showline = [boardid,id,result[0][2],len(result)]
+        if myip != "":
+            showline.insert(0, myip) # if enables multiple ip, print IP first
+        print(" ".join(str(i) for i in (showline)))
     except:
         try:
             print(" ".join(str(i) for i in (boardid,id,pformat(result[0][2]),len(result))))

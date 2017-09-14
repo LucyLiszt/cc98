@@ -2,7 +2,7 @@
 
 ## Snapshot
 
-![Snapshot](doc/snapshot.jpg)
+![Snapshot](snapshot.jpg)
 
 ## Language
 
@@ -28,6 +28,8 @@ Python3
 
 4. myip: 本次运行的ip，如果不需要启用多IP功能可以不提供，否则需要提供一个系统现在已经获取的IP
 
+5. CONFIG_INTERESTING_BOARDS: 特别关注的板块，在不带参数运行时默认监测新帖和十大，但你可以指定更多实时监测的板块
+
 这是一个config.py的例子：
 
 ```
@@ -41,6 +43,7 @@ def db():
     return conn
 enable_multiple_ip=False
 myip='10.1.2.{}'.format(random.randint(66,99))  #randomly choose a source ip for crawler
+CONFIG_INTERESTING_BOARDS = [] # only fetch hot and new topics, without any boards especially interested
 ```
 
 ### 建议在screen中运行

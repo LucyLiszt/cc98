@@ -3,7 +3,7 @@
 from EasyLogin import EasyLogin  # 假设已经pip install bs4 requests pymysql
 from time import sleep
 from mpms import MultiProcessesMultiThreads  # 你可以pip install mpms，项目地址：https://github.com/aploium/mpms
-from config import COOKIE, db, enable_multiple_ip
+from config import COOKIE, db, enable_multiple_ip, CONFIG_INTERESTING_BOARDS
 from pprint import pprint, pformat
 
 if enable_multiple_ip:  # 是否启用多IP轮换爬取，一般设置为 False
@@ -310,12 +310,14 @@ def spyBoard(boardid=182, pages_input=None, sleeptime=86400, processes=2, thread
 
 def spyNew(sleeptime=300, processes=5, threads=4):
     """
-    对热门、新帖、心灵之约、暑假水版进行监测
+    对热门、新帖以及额外配置的板块列表进行监测
     """
     m = MultiProcessesMultiThreads(getBBS, handler, processes=processes, threads_per_process=threads)
     t = 0
     workload = set([])
-    thenew = getHotPost() + getNewPost() + getBoardPage(182, 1) + getBoardPage(758, 1)
+    thenew = getHotPost() + getNewPost()
+    for boardid in CONFIG_INTERESTING_BOARDS:
+        thenew += getBoardPage(int(boardid), 1)
     for boardid, i in thenew:
         boardid, i = int(boardid), int(i)
         if (boardid, i) not in workload:

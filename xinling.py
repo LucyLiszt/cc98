@@ -1,28 +1,65 @@
 # coding:utf-8
-# stable version on 2017-07-31
+# stable version on 2017-09-14
+
 from EasyLogin import EasyLogin  # 假设已经pip install bs4 requests pymysql
 from time import sleep
 from mpms import MultiProcessesMultiThreads  # 你可以pip install mpms，项目地址：https://github.com/aploium/mpms
-from config import COOKIE, db, enable_multiple_ip, CONFIG_INTERESTING_BOARDS
 from pprint import pprint, pformat
+import socket, requests, sys, pymysql, re, os
+from config import COOKIE, db, enable_multiple_ip, CONFIG_INTERESTING_BOARDS
+
+"""
+欢迎阅读chenyuan写的cc98爬虫代码, 我假设你已经安装了以下软件/阅读了以下文档：
+1) python3 https://python.org/
+2) mysql https://www.mysql.com/
+3) requests: 让 HTTP 服务人类 http://cn.python-requests.org/zh_CN/latest/
+4) Beautiful Soup 文档 https://www.crummy.com/software/BeautifulSoup/bs4/doc.zh/
+5) PyMySQL documentation: https://pymysql.readthedocs.io/en/latest/
+6) EasyLogin: 这个是我为了简化对requests和BeautifulSoup的调用而写的库 https://github.com/zjuchenyuan/EasyLogin
+7) mpms: 多进程多线程并发 https://github.com/aploium/mpms
+
+代码阅读建议：
+    建议使用PyCharm(https://www.jetbrains.com/pycharm/)阅读python代码，哪里不懂按住Ctrl点哪里
+"""
+
+
+def function_hook_parameter(oldfunc, parameter_index, parameter_name, parameter_value):
+    """
+    这个函数只是用于辅助实现多IP爬取，并不是很重要，你可以放心地跳过此函数继续阅读
+
+    创造一个wrapper函数，劫持oldfunc传入的第parameter_index名为parameter_name的函数，固定其值为parameter_value; 不影响调用该函数时传入的任何其他参数
+    用法： 原函数 = function_hook_parameter(原函数, 从1开始计数的参数所处的位置, 这个参数的名称, 需要替换成的参数值)
+
+    例子： 需要劫持socket.create_connection这个函数，其函数原型如下： 
+               create_connection(address, timeout=_GLOBAL_DEFAULT_TIMEOUT, source_address=None)
+           需要对其第3个参数source_address固定为value，劫持方法如下
+               socket.create_connection = function_hook_parameter(socket.create_connection, 3, "source_address", value)
+    """
+    real_func = oldfunc
+
+    def newfunc(*args, **kwargs):  # args是参数列表list，kwargs是带有名称keyword的参数dict
+        newargs = list(args)
+        if len(args) >= parameter_index:  # 如果这个参数被直接传入，那么肯定其前面的参数都是无名称的参数，args的长度肯定长于其所在的位置
+            newargs[parameter_index - 1] = parameter_value  # 第3个参数在list的下表是2
+        else:  # 如果不是直接传入，那么就在kwargs中 或者可选参数不存在这个参数，强制更新掉kwargs即可
+            kwargs[parameter_name] = parameter_value
+        return real_func(*newargs, **kwargs)
+
+    return newfunc
+
 
 if enable_multiple_ip:  # 是否启用多IP轮换爬取，一般设置为 False
-    import socket
     from config import myip  # myip是一个目前操作系统已经获得的IP，至于Linux如何获得多个IP可以参考：https://py3.io/Linux-setup.html#ip-1
-
-    real_create_conn = socket.create_connection
-
-
-    def set_src_addr(*args):  # 本函数用于替换socket建立网络连接的set_src_addr函数，将IP修改后调用原函数
-        address, timeout = args[0], args[1]
-        source_address = (myip, 0)
-        return real_create_conn(address, timeout, source_address)
-
-
-    socket.create_connection = set_src_addr  # for multiple ip support
+    socket.create_connection = function_hook_parameter(socket.create_connection, 3, "source_address", (myip, 0))
+    requests.packages.urllib3.util.connection.create_connection = function_hook_parameter(
+        requests.packages.urllib3.util.connection.create_connection,
+        3,
+        "source_address",
+        (myip, 0)
+    )
+    # 我就是在PyCharm里一步步Ctrl点击发现的这requests复制了一份socket.create_connection的代码并加上了新功能 从而绕过了socket.create_connection，藏的这么深Orz
 else:
     myip = ""
-import requests, sys, pymysql, re, os
 
 DOMAIN = "http://www.cc98.org"  # 假设当前网络能访问到本域名
 
@@ -202,6 +239,8 @@ def getBBS(boardid, id, big, morehint=False):
             table = floorstart.next_sibling.next_sibling  # 假设楼层内容开始的table前都有<a name="1"></a>
 
             # print(table)
+            table_part2 = None
+            lastedit = None
             for t in list(table.next_siblings)[0:20]:  # 由于BeautifulSoup太渣,事实上table还有一部分
                 if "IP" in str(t):
                     table_part2 = t
@@ -209,11 +248,11 @@ def getBBS(boardid, id, big, morehint=False):
                     # print(table_part2)
             user = table.find('b').text  # 假设表格中第一个加粗<b>的就是发帖用户名
             # print("{},{},{},{}".format(id,star,user,i))
-            lastedit = table_part2.find("span", attrs={
-                "style": "color: gray;"})  # 假设本楼层发生了编辑，最后的编辑时间<span style="color: gray;">本贴由作者最后编辑于 2016/10/28 21:33:56</span>
+            if table_part2 is not None:
+                lastedit = table_part2.find("span", attrs=dict(style="color: gray;"))  # 假设本楼层发生了编辑，最后的编辑时间<span style="color: gray;">本贴由作者最后编辑于 2016/10/28 21:33:56</span>
 
             lastedittime = " ".join(lastedit.text.split()[-2:]).replace("/",
-                                                                        "-") if lastedit != None else "1970-01-01 08:00:01"  # 没有编辑就返回0
+                                                                        "-") if lastedit is not None else "1970-01-01 08:00:01"  # 没有编辑就返回0
             # print(lastedittime)
             posttime = table.find_next("td", attrs={"align": "center"}).get_text(strip=True).replace("/",
                                                                                                      "-")  # 发帖时间，注意find_next有可能找到下个楼层，希望没错         <td class="tablebody1" valign="middle" align="center" width="175">
@@ -284,7 +323,7 @@ def handler(meta, boardid, id, result, big):
         print(e)
 
 
-def spyBoard_dict(boardid_dict=[182], pages_input=None, sleeptime=86400, processes=2, threads=2):
+def spyBoard_dict(boardid_dict, pages_input=None, sleeptime=86400, processes=2, threads=2):
     """
     对给定的板块id列表进行监测
     """

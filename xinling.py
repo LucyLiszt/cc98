@@ -65,16 +65,6 @@ DOMAIN = "http://www.cc98.org"  # 假设当前网络能访问到本域名
 
 conn = db()  # 建立数据库连接，如果数据库连接失败 不处理异常 直接退出
 
-try:
-    EMOJI_FILTER = re.compile(u'[\U00010000-\U0010ffff]')
-except re.error:
-    EMOJI_FILTER = re.compile(u'[\uD800-\uDBFF][\uDC00-\uDFFF]')
-
-def filter_emoji(desstr, restr='emoji'):  # 由于emoji无法用utf8存储 目前的方法是替换为文字emoji, 这样会丢失一些信息 TODO: fix this
-    global EMOJI_FILTER
-    return EMOJI_FILTER.sub(restr, desstr)
-
-
 def createTable(boardid, big=""):
     """
     建表函数 需要传入板块id 和 大表前缀("big"或"")，尝试进行建表sql语句，忽视错误(如表已经存在)
@@ -98,7 +88,7 @@ CREATE TABLE `{big}bbs_{boardid}` (
   KEY `a4` (`id`),
   KEY `a5` (`lc`),
   KEY `a6` (`edittime`)
-) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4;
 """.format(big=big, boardid=boardid)
     global conn
     conn = db()  # 强制重新与数据库重新连接 TODO: 是否有必要？
@@ -306,13 +296,14 @@ def handler(meta, boardid, id, result, big):
                                                                                              pymysql.escape_string(
                                                                                                  i[2]), i[3], i[4])
         # print(sql)
-    sql = filter_emoji(sql[:-1])  # .replace("\n","<br>")
-    # print(sql)
+    sql = sql[:-1]
+    # 将数据库改为utf8mb4编码后，现在不再替换emoji表情
     cur = conn.cursor()
     try:
-        cur.execute("SET NAMES utf8;")
+        cur.execute("SET NAMES utf8mb4;SET CHARACTER SET utf8mb4; SET character_set_connection=utf8mb4;") #相应的这里要处理好编码问题
     except:
         conn = db()
+        cur.execute("SET NAMES utf8mb4;SET CHARACTER SET utf8mb4; SET character_set_connection=utf8mb4;")
     try:
         cur.execute(sql)
         conn.commit()

@@ -24,7 +24,7 @@ CREATE TABLE `data` (
   KEY `a4` (`id`),
   KEY `a5` (`lc`),
   KEY `a6` (`edittime`)
-) ENGINE=MRG_MyISAM DEFAULT CHARSET=utf8 UNION=(`bigbbs_100`,`bigbbs_758`,`bigbbs_...`); #! change here to your bigbbs table list!
+) ENGINE=MRG_MyISAM DEFAULT CHARSET=utf8mb4 UNION=(`bigbbs_100`,`bigbbs_758`,`bigbbs_...`); #! change here to your bigbbs table list!
 """
 
 from config import db
@@ -57,7 +57,7 @@ CREATE TABLE if not exists `bigbbs_{id}` (
   KEY `a4` (`id`),
   KEY `a5` (`lc`),
   KEY `a6` (`edittime`)
-) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4;
 insert ignore into history(
     SELECT distinct
         a.id,

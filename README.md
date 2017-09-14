@@ -14,6 +14,12 @@ Python3
 
 `pip3 install bs4 requests pymysql`
 
+## Code
+
+主要的代码在这里： [xinling.py](xinling.py)
+
+util目录下py文件为方便管理用的一些代码，主要代码中不会import
+
 ## Manual
 
 ### config.py
@@ -22,7 +28,7 @@ Python3
 
 1. COOKIE: dict, 你的cc98登录身份的cookie，至少需要包含aspsky，可以从浏览器登录后在开发人员工具中复制，否则无法爬取校园信息和心灵之约板块
 
-2. db(): function, 这个函数返回一个数据库的连接
+2. db(): function, 这个函数返回一个数据库的连接，这个连接应该是utf8mb4编码的
 
 3. enable_multiple_ip: boolean, 是否启用多IP功能；仅能在Linux下启用
 
@@ -38,7 +44,7 @@ import random,pymysql
 COOKIE = {'aspsky':'SOMETHING CREDIENTIAL','BoardList':'BoardID=Show',}
 def db():
     global conn
-    conn = pymysql.connect(user='root',passwd='123456',host='localhost',port=3306,db='cc98',charset='utf8',init_command="set NAMES utf8")
+    conn = pymysql.connect(user='root',passwd='123456',host='localhost',port=3306,db='cc98',charset='utf8',init_command="set NAMES utf8mb4", use_unicode=True)
     conn.encoding = "utf8"
     return conn
 enable_multiple_ip=False
@@ -79,6 +85,12 @@ CONFIG_INTERESTING_BOARDS = [] # only fetch hot and new topics, without any boar
 数据库还是要能连上的，需要创建数据库，但建表的操作是自动的，不需要执行额外的sql文件
 
 欢迎提Issue，Pull
+
+### 数据库从utf8迁移到utf8mb4
+
+过去的代码是利用正则删去了emoji表情，参考这个[StackOverflow上的解答](https://stackoverflow.com/questions/26532722/how-to-encode-utf8mb4-in-python)后，现在进行数据库变更，代码中不再过滤emoji表情
+
+数据库变更代码请参考[util/db_update_to_utf8mb4.py](util/db_update_to_utf8mb4.py)
 
 ## Credits
 

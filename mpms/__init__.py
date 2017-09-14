@@ -11,13 +11,24 @@ import multiprocessing
 import os
 import threading
 import traceback
+import logging
+
+try:
+    import queue
+except:
+    import Queue as queue
 
 try:
     from typing import Callable, Any
 except:
     pass
 
-__ALL__ = ["MultiProcessesMultiThreads"]
+__ALL__ = ["MultiProcessesMultiThreads", "MPMS", "ParamTransfer"]
+
+VERSION = (0, 6, 2, 0)
+VERSION_STR = "{}.{}.{}.{}".format(*VERSION)
+
+logger = logging.getLogger(__name__)
 
 
 def _dummy_handler(*args, **kwargs):
@@ -51,6 +62,17 @@ def _producer_multi_threads(queue_task, queue_product, worker_function):
             queue_task.task_done()
 
 
+def _subprocesses_queue_transfer(source_queue, dest_queue):
+    while True:
+        try:
+            task = source_queue.get()
+            dest_queue.put(task)
+        except:
+            traceback.print_exc()
+        finally:
+            source_queue.task_done()
+
+
 def _producer_multi_processes(queue_task,
                               queue_product,
                               threads_per_process,
@@ -63,25 +85,35 @@ def _producer_multi_processes(queue_task,
     :type threads_per_process: int
     :type worker_function: Callable[[Any], Any]
     """
+    _queue_task = queue.Queue(maxsize=threads_per_process)
+    _queue_product = queue.Queue()
 
-    pool = [threading.Thread(target=_producer_multi_threads, args=(queue_task, queue_product, worker_function))
+    pool = [threading.Thread(target=_producer_multi_threads, args=(_queue_task, _queue_product, worker_function))
             for _ in range(threads_per_process)]
     for t in pool:
         t.daemon = True
         t.start()
 
+    th = threading.Thread(target=_subprocesses_queue_transfer, args=(queue_task, _queue_task))
+    th.daemon = True
+    th.start()
+
+    th = threading.Thread(target=_subprocesses_queue_transfer, args=(_queue_product, queue_product))
+    th.daemon = True
+    th.start()
+
     # 等待所有子线程结束
     for t in pool:
-        # dbgprint('子线程结束', t.name, multiprocessing.current_process().name, v=4)
         t.join()
-        del t
+        logger.debug("subthread {} of {} stopped".format(t.name, multiprocessing.current_process().name))
+    logger.debug("subprocess {} completed".format(multiprocessing.current_process().name))
 
-    os._exit(1)  # 暴力退出子进程
+
+class _QueueEndSignal(object):
+    pass
 
 
-class _QueueEndSignal:
-    def __init__(self):
-        pass
+_queue_end_signal = _QueueEndSignal()
 
 
 class ParamTransfer(dict):
@@ -217,7 +249,7 @@ class MultiProcessesMultiThreads:
         """
         end_signal = _QueueEndSignal()
         # 在任务队列尾部加入结束信号来关闭任务队列
-        for i in range(self.processes_count * self.threads_per_process):
+        for i in range(self.processes_count * self.threads_per_process * 3):
             self.put(end_signal)
         self.task_queue.close()
         self.is_task_queue_closed = True
@@ -234,12 +266,21 @@ class MultiProcessesMultiThreads:
         # 等待所有工作进程结束
         for p in self.worker_processes_pool:
             p.join()
-        self.product_queue.put((None, _QueueEndSignal()))  # 在结果队列中加入退出指示信号
+        logger.debug("all worker completed")
+        self.product_queue.put((None, _queue_end_signal))  # 在结果队列中加入退出指示信号
         self.handler_thread.join()  # 等待处理线程结束
+        logger.debug("handler_thread completed")
 
     def __del__(self):
         del self.product_queue
         del self.task_queue
+
+    def __len__(self):
+        """
+        return inaccurate remain size of task queue
+        返回当前任务队列（还需要执行的）的不精确大小
+        """
+        return self.task_queue.qsize()
 
     def __init__(
             self,
@@ -271,7 +312,22 @@ class MultiProcessesMultiThreads:
             如果是需要在实例全局生效的, 请以 meta[key] = obj 形式写入
             如果只需要在handler(当然也包括setup和teardown)中生效, 请以 meta.cycle[key] = obj 形式写入
 
-        具体的例子可以看 demo1.py
+        example:
+
+            def handler_setup(meta):
+                print("setup!")
+                meta.cycle["log_file"] = open("log.txt", "a", encoding="utf-8")
+
+            def handler_teardown(meta):
+                print("teardown!")
+                meta.cycle["log_file"].close()
+
+            def handler(meta, something):
+                fw = meta.cycle["log_file"]
+                fw.write(something)
+
+
+        具体的例子可以看 demo1_plus.py
         --------- handler setup teardown lifecycle ------
 
         :param worker_function: 工作函数
@@ -327,5 +383,10 @@ class MultiProcessesMultiThreads:
                       self.worker_function
                       )
             )
+            p.daemon = True
             p.start()
             self.worker_processes_pool.append(p)
+
+
+# alias
+MPMS = MultiProcessesMultiThreads

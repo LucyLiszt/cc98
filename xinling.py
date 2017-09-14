@@ -1,11 +1,11 @@
 # coding:utf-8
 # stable version on 2017-09-14
 
-from EasyLogin import EasyLogin  # 假设已经pip install bs4 requests pymysql
+from EasyLogin import EasyLogin  # 安装依赖：pip install bs4 requests pymysql
 from time import sleep
-from mpms import MultiProcessesMultiThreads  # 你可以pip install mpms，项目地址：https://github.com/aploium/mpms
+from mpms import MPMS  # 虽然本项目里面已经包含mpms的代码，你也可以pip install mpms，项目地址：https://github.com/aploium/mpms
 from pprint import pprint, pformat
-import socket, requests, sys, pymysql, re, os
+import socket, requests, sys, pymysql, re, os, time
 from config import COOKIE, db, enable_multiple_ip, CONFIG_INTERESTING_BOARDS
 
 """
@@ -294,7 +294,7 @@ def handler(meta, boardid, id, result, big):
         sql += "({},{},\"{}\",\"{}\",\"{}\",\"{}\",now()),".format(id, i[0],
                                                                             pymysql.escape_string(i[1]),
                                                                             pymysql.escape_string(i[2]), i[3], i[4])
-        # print(sql)
+    # print(sql)
     sql = sql[:-1]
     # 将数据库改为utf8mb4编码后，现在不再替换emoji表情
     cur = conn.cursor()
@@ -306,7 +306,7 @@ def handler(meta, boardid, id, result, big):
     try:
         cur.execute(sql)
         conn.commit()
-    except pymysql.err.ProgrammingError as e:
+    except pymysql.err.ProgrammingError as e: # 这种错误就是还没有建表，先调用建表函数再插入
         createTable(boardid, big=big)
         cur.execute(sql)
         conn.commit()
@@ -318,7 +318,7 @@ def spyBoard_dict(boardid_dict, pages_input=None, sleeptime=86400, processes=2, 
     """
     对给定的板块id列表进行监测
     """
-    m = MultiProcessesMultiThreads(getBBS, handler, processes=processes, threads_per_process=threads)
+    m = MPMS(getBBS, handler, processes=processes, threads_per_process=threads)
     for boardid in boardid_dict:
         if pages_input is not None:
             pages = pages_input
@@ -340,11 +340,12 @@ def spyBoard(boardid=182, pages_input=None, sleeptime=86400, processes=2, thread
 
 def spyNew(sleeptime=300, processes=5, threads=4):
     """
-    对热门、新帖以及额外配置的板块列表进行监测
+    对热门、新帖以及额外配置的板块列表进行监测，这是直接运行代码将调用的函数
     """
-    m = MultiProcessesMultiThreads(getBBS, handler, processes=processes, threads_per_process=threads)
+    starttime = time.time()
+    m = MPMS(getBBS, handler, processes=processes, threads_per_process=threads)
     t = 0
-    workload = set([])
+    workload = set([]) # 为了去重
     thenew = getHotPost() + getNewPost()
     for boardid in CONFIG_INTERESTING_BOARDS:
         thenew += getBoardPage(int(boardid), 1)
@@ -353,7 +354,12 @@ def spyNew(sleeptime=300, processes=5, threads=4):
         if (boardid, i) not in workload:
             workload.add((boardid, i))
             m.put([boardid, i, ""])
-    sleep(sleeptime)
+    while time.time() - starttime < sleeptime and len(m)>0:
+        print("[{showtime}] Remaning queue length: {len}".format(showtime=time.strftime("%Y-%m-%d %H:%M:%S"), len=len(m)))
+        sleep(1)
+    sleep(5)
+    print("All done! sleep a while...")
+    sleep(max(0,starttime + sleeptime - time.time()))
     m.close()
     return
 

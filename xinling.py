@@ -65,13 +65,14 @@ DOMAIN = "http://www.cc98.org"  # 假设当前网络能访问到本域名
 
 conn = db()  # 建立数据库连接，如果数据库连接失败 不处理异常 直接退出
 
+try:
+    EMOJI_FILTER = re.compile(u'[\U00010000-\U0010ffff]')
+except re.error:
+    EMOJI_FILTER = re.compile(u'[\uD800-\uDBFF][\uDC00-\uDFFF]')
 
 def filter_emoji(desstr, restr='emoji'):  # 由于emoji无法用utf8存储 目前的方法是替换为文字emoji, 这样会丢失一些信息 TODO: fix this
-    try:
-        co = re.compile(u'[\U00010000-\U0010ffff]')
-    except re.error:
-        co = re.compile(u'[\uD800-\uDBFF][\uDC00-\uDFFF]')
-    return co.sub(restr, desstr)
+    global EMOJI_FILTER
+    return EMOJI_FILTER.sub(restr, desstr)
 
 
 def createTable(boardid, big=""):

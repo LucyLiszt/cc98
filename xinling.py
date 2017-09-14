@@ -300,7 +300,7 @@ def handler(meta, boardid, id, result, big):
     global conn
     sql = "insert ignore into {}bbs_{}(id,lc,user,content,posttime,edittime,gettime) values ".format(big, boardid)
     for i in result:
-        sql += "({},{},\"{}\",\"{}\",\"{}\",\"{}\",date_add(now(),interval 8 hour)),".format(id, i[0],
+        sql += "({},{},\"{}\",\"{}\",\"{}\",\"{}\",now()),".format(id, i[0],
                                                                                              pymysql.escape_string(
                                                                                                  i[1]),
                                                                                              pymysql.escape_string(

@@ -277,24 +277,23 @@ def handler(meta, boardid, id, result, big):
     if len(result) > 1000:  # avoid too long sql
         handler(meta, boardid, id, result[1000:], big)
         result = result[:1000]
-    try:
-        showline = [boardid, id, result[0][2], len(result)]
-        if myip != "":
-            showline.insert(0, myip)  # if enables multiple ip, print IP first
-        print(" ".join(str(i) for i in (showline)))
-    except:
+    if result[0][0]==0: # 由于避免太长sql的特性，result[0]可能不是帖子标题，判断不是标题就不要显示了
         try:
-            print(" ".join(str(i) for i in (boardid, id, pformat(result[0][2]), len(result))))
+            showline = [boardid, id, result[0][2], len(result)]
+            if myip != "":
+                showline.insert(0, myip)  # if enables multiple ip, print IP first
+            print(" ".join(str(i) for i in (showline)))
         except:
-            print("Something cannot print")
+            try:
+                print(" ".join(str(i) for i in (boardid, id, pformat(result[0][2]), len(result))))
+            except:
+                print("Something cannot print")
     global conn
     sql = "insert ignore into {}bbs_{}(id,lc,user,content,posttime,edittime,gettime) values ".format(big, boardid)
     for i in result:
         sql += "({},{},\"{}\",\"{}\",\"{}\",\"{}\",now()),".format(id, i[0],
-                                                                                             pymysql.escape_string(
-                                                                                                 i[1]),
-                                                                                             pymysql.escape_string(
-                                                                                                 i[2]), i[3], i[4])
+                                                                            pymysql.escape_string(i[1]),
+                                                                            pymysql.escape_string(i[2]), i[3], i[4])
         # print(sql)
     sql = sql[:-1]
     # 将数据库改为utf8mb4编码后，现在不再替换emoji表情

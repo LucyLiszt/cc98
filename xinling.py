@@ -1,11 +1,11 @@
 # coding:utf-8
-# stable version on 2017-09-14
+# stable version on 2017-09-15
 
 from EasyLogin import EasyLogin  # 安装依赖：pip install bs4 requests pymysql
 from time import sleep
 from mpms import MPMS  # 虽然本项目里面已经包含mpms的代码，你也可以pip install mpms，项目地址：https://github.com/aploium/mpms
 from pprint import pprint, pformat
-import socket, requests, sys, pymysql, re, os, time
+import socket, requests, sys, pymysql, re, os, time, random
 from config import COOKIE, db, enable_multiple_ip, CONFIG_INTERESTING_BOARDS
 
 """
@@ -50,6 +50,7 @@ def function_hook_parameter(oldfunc, parameter_index, parameter_name, parameter_
 
 if enable_multiple_ip:  # 是否启用多IP轮换爬取，一般设置为 False
     from config import myip  # myip是一个目前操作系统已经获得的IP，至于Linux如何获得多个IP可以参考：https://py3.io/Linux-setup.html#ip-1
+
     socket.create_connection = function_hook_parameter(socket.create_connection, 3, "source_address", (myip, 0))
     requests.packages.urllib3.util.connection.create_connection = function_hook_parameter(
         requests.packages.urllib3.util.connection.create_connection,
@@ -64,6 +65,7 @@ else:
 DOMAIN = "http://www.cc98.org"  # 假设当前网络能访问到本域名
 
 conn = db()  # 建立数据库连接，如果数据库连接失败 不处理异常 直接退出
+
 
 def createTable(boardid, big=""):
     """
@@ -240,7 +242,8 @@ def getBBS(boardid, id, big, morehint=False):
             user = table.find('b').text  # 假设表格中第一个加粗<b>的就是发帖用户名
             # print("{},{},{},{}".format(id,star,user,i))
             if table_part2 is not None:
-                lastedit = table_part2.find("span", attrs=dict(style="color: gray;"))  # 假设本楼层发生了编辑，最后的编辑时间<span style="color: gray;">本贴由作者最后编辑于 2016/10/28 21:33:56</span>
+                lastedit = table_part2.find("span", attrs=dict(
+                    style="color: gray;"))  # 假设本楼层发生了编辑，最后的编辑时间<span style="color: gray;">本贴由作者最后编辑于 2016/10/28 21:33:56</span>
 
             lastedittime = " ".join(lastedit.text.split()[-2:]).replace("/",
                                                                         "-") if lastedit is not None else "1970-01-01 08:00:01"  # 没有编辑就返回0
@@ -277,7 +280,7 @@ def handler(meta, boardid, id, result, big):
     if len(result) > 1000:  # avoid too long sql
         handler(meta, boardid, id, result[1000:], big)
         result = result[:1000]
-    if result[0][0]==0: # 由于避免太长sql的特性，result[0]可能不是帖子标题，判断不是标题就不要显示了
+    if result[0][0] == 0:  # 由于避免太长sql的特性，result[0]可能不是帖子标题，判断不是标题就不要显示了
         try:
             showline = [boardid, id, result[0][2], len(result)]
             if myip != "":
@@ -292,21 +295,22 @@ def handler(meta, boardid, id, result, big):
     sql = "insert ignore into {}bbs_{}(id,lc,user,content,posttime,edittime,gettime) values ".format(big, boardid)
     for i in result:
         sql += "({},{},\"{}\",\"{}\",\"{}\",\"{}\",now()),".format(id, i[0],
-                                                                            pymysql.escape_string(i[1]),
-                                                                            pymysql.escape_string(i[2]), i[3], i[4])
+                                                                   pymysql.escape_string(i[1]),
+                                                                   pymysql.escape_string(i[2]), i[3], i[4])
     # print(sql)
     sql = sql[:-1]
     # 将数据库改为utf8mb4编码后，现在不再替换emoji表情
     cur = conn.cursor()
     try:
-        cur.execute("SET NAMES utf8mb4;SET CHARACTER SET utf8mb4; SET character_set_connection=utf8mb4;") #相应的这里要处理好编码问题
+        cur.execute(
+            "SET NAMES utf8mb4;SET CHARACTER SET utf8mb4; SET character_set_connection=utf8mb4;")  # 相应的这里要处理好编码问题
     except:
         conn = db()
         cur.execute("SET NAMES utf8mb4;SET CHARACTER SET utf8mb4; SET character_set_connection=utf8mb4;")
     try:
         cur.execute(sql)
         conn.commit()
-    except pymysql.err.ProgrammingError as e: # 这种错误就是还没有建表，先调用建表函数再插入
+    except pymysql.err.ProgrammingError as e:  # 这种错误就是还没有建表，先调用建表函数再插入
         createTable(boardid, big=big)
         cur.execute(sql)
         conn.commit()
@@ -345,21 +349,23 @@ def spyNew(sleeptime=300, processes=5, threads=4):
     starttime = time.time()
     m = MPMS(getBBS, handler, processes=processes, threads_per_process=threads)
     t = 0
-    workload = set([]) # 为了去重
+    workload = set([])  # 为了去重
     thenew = getHotPost() + getNewPost()
     for boardid in CONFIG_INTERESTING_BOARDS:
         thenew += getBoardPage(int(boardid), 1)
+    random.shuffle(thenew)  # 随机打乱一下
     for boardid, i in thenew:
         boardid, i = int(boardid), int(i)
         if (boardid, i) not in workload:
             workload.add((boardid, i))
             m.put([boardid, i, ""])
-    while time.time() - starttime < sleeptime and len(m)>0:
-        print("[{showtime}] Remaning queue length: {len}".format(showtime=time.strftime("%Y-%m-%d %H:%M:%S"), len=len(m)))
+    while time.time() - starttime < sleeptime and len(m) > 0:
+        print(
+            "[{showtime}] Remaning queue length: {len}".format(showtime=time.strftime("%Y-%m-%d %H:%M:%S"), len=len(m)))
         sleep(1)
     sleep(5)
     print("All done! sleep a while...")
-    sleep(max(0,starttime + sleeptime - time.time()))
+    sleep(max(0, starttime + sleeptime - time.time()))
     m.close()
     return
 

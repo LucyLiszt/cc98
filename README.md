@@ -4,23 +4,30 @@
 
 ![Snapshot](snapshot.jpg)
 
-## Language
+## 依赖
 
-Python3
+* Python3
+* 数据库： `mysql-server`
+* 缓存：`redis-server`
+* pip包：
 
-## Requirement
+`pip3 install bs4 requests pymysql redis`
 
-本爬虫依赖的EasyLogin库需要安装BeautifulSoup和requests才能运行
+## 为什么需要redis
 
-`pip3 install bs4 requests pymysql`
+在爬取特定帖子前比较点击数与缓存的点击数，如果点击量没有发生变化则不爬取
 
-## Code
+缓存则使用redis实现，以保证多次爬取之间缓存的持久性
+
+如果缓存失效，将重新全部爬取一遍
+
+## 代码
 
 主要的代码在这里： [xinling.py](xinling.py)
 
 util目录下py文件为方便管理用的一些代码，主要代码中不会import
 
-## Manual
+## 说明
 
 ### config.py
 
@@ -62,7 +69,7 @@ def redis_conn():
 
 ### 建议在screen中运行
 
-目前的版本在完成抓取任务后不会自动退出，需要定时kill，建议在screen中执行
+目前的版本在完成抓取任务后可能不会自动退出，需要定时kill，建议在screen中执行
 
     screen -S cc98
     while [ '1' = '1' ]; do python3 xinling.py; done
@@ -73,6 +80,12 @@ def redis_conn():
 不带参数地运行就会抓取十大+最新发帖，指定一个版块ID的参数则会抓取本版块所有发帖
 
     python3 xinling.py 100 #get all post in "校园信息"
+
+带上参数allboard运行，将监测所有版块首页，对点击量发生了变化的帖子爬取，这样运行不会主动退出 请记得killall：
+
+```
+python3 xinling.py allboard
+```
 
 ### 如何更好地全站搜索
 
@@ -100,7 +113,7 @@ def redis_conn():
 
 数据库变更代码请参考[util/db_update_to_utf8mb4.py](util/db_update_to_utf8mb4.py)
 
-## Credits
+## 感谢
 
 https://github.com/aploium/mpms
 

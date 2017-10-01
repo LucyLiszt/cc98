@@ -1,12 +1,19 @@
 # coding:utf-8
-# dev(try redis) version on 2017-10-1, please use stable version on master branch
+# dev(redis cache) version on 2017-10-1, please use stable version on master branch
 
+import os
+import pymysql
+import requests
+import socket
+import sys
+import time
+import traceback
 from EasyLogin import EasyLogin  # 安装依赖：pip install bs4 requests pymysql
-from time import sleep
-from mpms import MPMS  # 虽然本项目里面已经包含mpms的代码，你也可以pip install mpms，项目地址：https://github.com/aploium/mpms
 from pprint import pprint, pformat
-import socket, requests, sys, pymysql, re, os, time, random, redis, traceback
+from time import sleep
+
 from config import COOKIE, db, redis_conn, enable_multiple_ip, CONFIG_INTERESTING_BOARDS, CONFIG_IGNORE_POSTS
+from mpms import MPMS  # 虽然本项目里面已经包含mpms的代码，你也可以pip install mpms，项目地址：https://github.com/aploium/mpms
 
 """
 欢迎阅读chenyuan写的cc98爬虫代码, 我假设你已经安装了以下软件/阅读了以下文档：
@@ -67,7 +74,8 @@ else:
 DOMAIN = "http://www.cc98.org"  # 假设当前网络能访问到本域名
 
 conn = db()  # 建立数据库连接，如果数据库连接失败 不处理异常 直接退出
-myredis = redis_conn() # 建立redis连接
+myredis = redis_conn()  # 建立redis连接
+
 
 def createTable(boardid, big=""):
     """
@@ -181,29 +189,30 @@ def getBoardPage_detailed(boardid, page):
     :param page: 第多少页，如1
     :return: 如[["182", "4725833"], ["182", "4726027"], ...]
     """
-    #global myredis
-    #redis_pipe = myredis.pipeline()
+    # global myredis
+    # redis_pipe = myredis.pipeline()
     a = EasyLogin(cookie=COOKIE)
     a.get("{}/list.asp?boardid={}&page={}".format(DOMAIN, boardid, page))
     result = set()
     for i in a.getList("dispbbs.asp?boardID=", returnType="element"):
-        if "topic_" not in i.get("id",""):
+        if "topic_" not in i.get("id", ""):
             continue
-        body1 = i.find_next("td",{"class":"tablebody1"})
+        body1 = i.find_next("td", {"class": "tablebody1"})
         try:
             reply, clicks = body1.text.strip().split("/")
         except:
             reply, clicks = str(-1), str(-1)
-        lastpost = body1.find_next("td",{"class":"tablebody2"}).find("a").text.strip()
+        lastpost = body1.find_next("td", {"class": "tablebody2"}).find("a").text.strip()
         postid = getPart(i["href"], "&ID=", "&")
         result.add((postid, reply, clicks, lastpost))
-        #redis_pipe.set("reply_"+postid, reply).set("clicks_"+postid, clicks).set("lastpost_"+postid, lastpost)
-    #print(redis_pipe.execute())
+        # redis_pipe.set("reply_"+postid, reply).set("clicks_"+postid, clicks).set("lastpost_"+postid, lastpost)
+    # print(redis_pipe.execute())
     return [(boardid, i[0], i[1], i[2], i[3]) for i in result]
 
 
 def getBoardPage(boardid, page):
-    return [(int(i[0]),int(i[1])) for i in getBoardPage_detailed(boardid, page)]
+    return [(int(i[0]), int(i[1])) for i in getBoardPage_detailed(boardid, page)]
+
 
 def getBBS(boardid, id, big, morehint=False):
     """
@@ -222,7 +231,7 @@ def getBBS(boardid, id, big, morehint=False):
     result = []
     star = 1
     a.get("{}/dispbbs.asp?BoardID={}&id={}&star=1".format(DOMAIN, boardid, id))
-    myredis.incr("clicks_"+str(id))
+    myredis.incr("clicks_" + str(id))
     try:
         number = int(a.b.find("span", attrs={"id": "topicPagesNavigation"}).find(
             "b").text)  # 假设<span id="topicPagesNavigation">本主题贴数 <b>6</b>
@@ -238,7 +247,7 @@ def getBBS(boardid, id, big, morehint=False):
             if morehint:
                 print("page {star}".format(star=star))
             a.get("{}/dispbbs.asp?BoardID={}&id={}&star={}".format(DOMAIN, boardid, id, star))
-            myredis.incr("clicks_"+str(id))
+            myredis.incr("clicks_" + str(id))
         else:
             title = a.b.title.text.strip(" » CC98论坛")  # 帖子标题使用页面标题，假设页面标题的格式为"title &raquo; CC98论坛"
             result.append([0, "", title, "1970-01-01 08:00:01", "1970-01-01 08:00:01"])
@@ -362,7 +371,9 @@ def spyBoard_dict(boardid_dict, pages_input=None, sleeptime=86400, processes=2, 
 def spyBoard(boardid=182, pages_input=None, sleeptime=86400, processes=2, threads=2):
     spyBoard_dict([boardid], pages_input, sleeptime, processes, threads)
 
-myprint = lambda s:print("[{showtime}] {s}".format(showtime=time.strftime("%Y-%m-%d %H:%M:%S"),s=s))
+
+myprint = lambda s: print("[{showtime}] {s}".format(showtime=time.strftime("%Y-%m-%d %H:%M:%S"), s=s))
+
 
 def plus1(filename):
     """
@@ -370,27 +381,29 @@ def plus1(filename):
     用于统计发生次数
     """
     try:
-        with open(filename,"r") as fp:
+        with open(filename, "r") as fp:
             data = fp.read()
         result = int(data)
     except:
         result = 0
     result += 1
-    with open(filename,"w") as fp:
+    with open(filename, "w") as fp:
         fp.write(str(result))
-    
+
 
 def filter_pass(boardid, postid, reply, clicks, lastpost):
     global myredis, ignore_counts
     redis_pipe = myredis.pipeline()
     if (int(boardid), int(postid)) in CONFIG_IGNORE_POSTS:
-        return False# CONFIG_IGNORE_POSTS不会爬取
-    oldclicks = myredis.get("clicks_"+str(postid))
-    if bytes(clicks, encoding="utf-8") == oldclicks and clicks!="-1": # 如果点击量为-1表示这是投票贴 没有好方法只能强制抓取
+        return False  # CONFIG_IGNORE_POSTS不会爬取
+    oldclicks = myredis.get("clicks_" + str(postid))
+    if bytes(clicks, encoding="utf-8") == oldclicks and clicks != "-1":  # 如果点击量为-1表示这是投票贴 没有好方法只能强制抓取
         ignore_counts += 1
         return False
-    redis_pipe.set("reply_"+postid, reply).set("clicks_"+postid, clicks).set("lastpost_"+postid, lastpost).execute()
+    redis_pipe.set("reply_" + postid, reply).set("clicks_" + postid, clicks).set("lastpost_" + postid,
+                                                                                 lastpost).execute()
     return True
+
 
 def spyNew(sleeptime=100, processes=5, threads=4):
     """
@@ -405,21 +418,24 @@ def spyNew(sleeptime=100, processes=5, threads=4):
     workload = set()
     thenew = getHotPost() + getNewPost()
     boardlist = set([int(i[0]) for i in thenew])
-    myprint("get new finished, len(thenew)={}, len(boardlist)={}".format(len(thenew),len(boardlist)))
+    myprint("get new finished, len(thenew)={}, len(boardlist)={}".format(len(thenew), len(boardlist)))
     boardlist.update(CONFIG_INTERESTING_BOARDS)
-    
+
     newclicksdata = []
     for boardid in boardlist:
         newclicksdata += getBoardPage_detailed(boardid, 1)
-    
+
     for boardid, postid, reply, clicks, lastpost in newclicksdata:
         if filter_pass(boardid, postid, reply, clicks, lastpost):
             if postid not in workload:
                 m.put([boardid, postid, ""])
                 workload.add(postid)
-    myprint("Check {} boards, ignore {} posts, using {} seconds".format(len(boardlist), ignore_counts, int(time.time()-starttime)))
-    
-    while time.time() - starttime < sleeptime and len(m) > 0:
+    myprint("Check {} boards, ignore {} posts, using {} seconds".format(len(boardlist), ignore_counts,
+                                                                        int(time.time() - starttime)))
+    if time.time() - starttime > 10:
+        myprint("too slow! add wait time")
+        sleeptime += time.time() - starttime - 10
+    while len(m) > 0:
         myprint("Remaning queue length: {len}".format(len=len(m)))
         sleep(2)
     myprint("All done! wait 5 seconds to clean up")
@@ -468,42 +484,6 @@ def main():
     else:
         spyNew()
 
-        ##print(getBoardSize(182))
-        ##GetBBS
-        # for j in range(2,100):
-        #    for i in getBoardPage(100,j):
-        #        getBBS(100,4661275)
-
-        ##GetBoardID
-        """
-        def getBoardID(bigboardid=0):
-            a = EasyLogin(cookie=COOKIE)
-            a.get("{}/list.asp?boardid={}".format(DOMAIN, bigboardid) if bigboardid != 0 else DOMAIN)
-            l = a.getList("list.asp?boardid")
-            result = set()
-            for i in l:
-                if '&' in i:
-                    continue
-                result.add(getPart(i, "boardid=", "&"))
-            return [int(i) for i in result]
-        """
-        # print(sorted(getBoardID()))
-        # result = []
-        # for i in getBoardID():
-        #    result.extend(getBoardID(i))
-        # print(result)
-        # return result
-        ##CreateTable
-        # boardlist = [284,7, 15, 16, 17, 20, 21, 23, 25, 26, 28, 30, 36, 38, 39, 40, 41, 42, 47, 48, 49, 50, 52, 58, 60, 67, 68, 75, 77, 80, 81, 83, 84, 85, 86, 91, 99, 100, 101, 102, 103, 104, 105, 114, 115, 119, 122, 129, 135, 136, 139, 140, 142, 144, 145, 146, 147, 148, 149, 151, 152, 154, 155, 157, 158, 164, 165, 169, 170, 173, 176, 179, 180, 182, 183, 184, 186, 187, 188, 190, 191, 192, 193, 194, 195, 198, 203, 204, 205, 206, 207, 208, 211, 212, 213, 214, 216, 217, 221, 222, 224, 226, 229, 232, 233, 234, 235, 236, 239, 241, 245, 246, 247, 249, 254, 256, 258, 261, 262, 263, 264, 266, 268, 269, 270, 271, 272, 273, 274, 275, 276, 277, 278, 279, 281, 282, 283, 285, 286, 287, 288, 290, 292, 294, 295, 296, 298, 303, 304, 306, 307, 308, 310, 311, 312, 314, 315, 316, 318, 319, 320, 321, 323, 324, 325, 326, 328, 329, 330, 334, 339, 341, 344, 346, 347, 351, 352, 353, 355, 357, 361, 362, 363, 367, 368, 369, 371, 372, 375, 377, 383, 391, 392, 393, 399, 401, 402, 403, 404, 405, 406, 408, 412, 417, 422, 423, 427, 430, 431, 432, 433, 434, 436, 437, 440, 442, 446, 447, 448, 449, 450, 451, 452, 454, 455, 457, 459, 460, 461, 462, 465, 467, 468, 469, 471, 472, 473, 475, 480, 481, 482, 483, 484, 485, 486, 489, 491, 492, 493, 494, 498, 499, 501, 502, 503, 504, 505, 506, 507, 511, 513, 514, 515, 518, 519, 520, 535, 537, 538, 540, 545, 546, 548, 549, 550, 551, 559, 560, 562, 563, 564, 568, 569, 572, 574, 575, 576, 578, 579, 580, 581, 582, 587, 588, 589, 590, 591, 592, 593, 594, 595, 596, 597, 598, 599, 600, 601, 602, 603, 605, 606, 607, 610, 611, 613, 614, 615, 616, 618, 620, 621, 622, 623, 624, 625, 626, 628, 629, 630, 631, 632, 633, 634, 635, 640, 642, 710, 711, 713, 714, 723, 724, 726, 727, 728, 733, 736, 741, 742, 743, 744, 745, 747, 748, 749, 750, 751, 752, 753, 754]
-        # for i in boardlist:
-        #    createTable(i)
-        ##GetNewPost
-        # return getNewPost()
-        ##SpyBoard
-        # spyBoard(boardid=182,spytimes=1)
-        ##GetHotPost
-        # print(getHotPost())
-
 
 def test(boardid=182, id=4702474, big=""):
     result = getBBS(boardid, id, big)
@@ -514,8 +494,33 @@ def test(boardid=182, id=4702474, big=""):
 
 if __name__ == "__main__":
     try:
-        if len(sys.argv) > 1 and sys.argv[1] == "test":
-            test()
+        if len(sys.argv) > 1:
+            if sys.argv[1] == "test":
+                test()
+            elif sys.argv[1] == "allboard":
+                CONFIG_INTERESTING_BOARDS = [513, 514, 515, 516, 517, 518, 519, 520, 7, 15, 16, 17, 19, 20, 21, 23, 535,
+                                             25, 26, 538, 28, 537, 30, 540, 544, 545, 546, 36, 548, 549, 39, 551, 41,
+                                             42, 550, 552, 553, 554, 47, 560, 48, 50, 562, 563, 49, 52, 559, 57, 58,
+                                             569, 572, 60, 67, 68, 581, 580, 583, 584, 585, 74, 75, 77, 80, 593, 594,
+                                             595, 596, 597, 598, 599, 81, 85, 86, 91, 83, 84, 88, 610, 611, 100, 101,
+                                             102, 103, 104, 105, 613, 99, 620, 616, 623, 624, 114, 115, 630, 119, 122,
+                                             126, 129, 135, 136, 139, 140, 142, 144, 145, 146, 147, 148, 149, 151, 152,
+                                             154, 155, 157, 158, 164, 165, 169, 170, 173, 176, 178, 180, 182, 184, 186,
+                                             188, 190, 191, 192, 193, 194, 198, 713, 714, 717, 208, 211, 212, 214, 217,
+                                             736, 226, 229, 232, 233, 234, 235, 236, 744, 748, 239, 555, 241, 557, 756,
+                                             758, 247, 248, 760, 761, 759, 252, 254, 255, 256, 258, 261, 263, 264, 266,
+                                             269, 270, 273, 274, 277, 278, 279, 281, 283, 284, 285, 294, 296, 304, 308,
+                                             312, 314, 315, 318, 319, 320, 321, 323, 324, 326, 328, 329, 330, 331, 334,
+                                             339, 341, 344, 346, 347, 351, 352, 353, 355, 357, 361, 362, 369, 371, 372,
+                                             374, 377, 383, 391, 392, 393, 399, 401, 402, 403, 404, 405, 406, 410, 411,
+                                             413, 414, 415, 416, 417, 418, 422, 424, 425, 426, 428, 429, 430, 431, 432,
+                                             434, 436, 437, 440, 445, 446, 447, 448, 449, 451, 452, 454, 455, 457, 459,
+                                             462, 464, 465, 467, 468, 469, 471, 472, 473, 474, 475, 476, 477, 478, 479,
+                                             480, 481, 482, 483, 484, 485, 486, 487, 488, 489, 490, 491, 492, 493, 494,
+                                             495, 496, 497, 498, 499, 501, 502, 503, 504, 505, 506, 507, 509, 511]
+                spyNew(sleeptime=864000, processes=2, threads=3)
+            else:
+                main()
         else:
             main()
     except KeyboardInterrupt:

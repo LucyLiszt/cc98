@@ -36,6 +36,8 @@ util目录下py文件为方便管理用的一些代码，主要代码中不会im
 
 5. CONFIG_INTERESTING_BOARDS: 特别关注的板块，在不带参数运行时默认监测新帖和十大，但你可以指定更多实时监测的板块
 
+6. CONFIG_IGNORE_POSTS: 不爬取的帖子，举例:[(80,4354326),(152,4374762)]
+
 这是一个config.py的例子：
 
 ```
@@ -50,6 +52,7 @@ def db():
 enable_multiple_ip=False
 myip='10.1.2.{}'.format(random.randint(66,99))  #randomly choose a source ip for crawler
 CONFIG_INTERESTING_BOARDS = [] # only fetch hot and new topics, without any boards especially interested
+CONFIG_IGNORE_POSTS = [] # ignore nothing
 ```
 
 ### 建议在screen中运行

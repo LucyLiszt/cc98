@@ -6,7 +6,7 @@ from time import sleep
 from mpms import MPMS  # 虽然本项目里面已经包含mpms的代码，你也可以pip install mpms，项目地址：https://github.com/aploium/mpms
 from pprint import pprint, pformat
 import socket, requests, sys, pymysql, re, os, time, random
-from config import COOKIE, db, enable_multiple_ip, CONFIG_INTERESTING_BOARDS
+from config import COOKIE, db, enable_multiple_ip, CONFIG_INTERESTING_BOARDS, CONFIG_IGNORE_POSTS
 
 """
 欢迎阅读chenyuan写的cc98爬虫代码, 我假设你已经安装了以下软件/阅读了以下文档：
@@ -366,14 +366,14 @@ def spyNew(sleeptime=100, processes=5, threads=4):
     starttime = time.time()
     m = MPMS(getBBS, handler, processes=processes, threads_per_process=threads)
     t = 0
-    workload = set([])  # 为了去重
+    workload = set(CONFIG_IGNORE_POSTS)  # CONFIG_IGNORE_POSTS预先加入到workload，被视为已经爬取过就不会爬取
     thenew = getHotPost() + getNewPost()
     for boardid in CONFIG_INTERESTING_BOARDS:
         thenew += getBoardPage(int(boardid), 1)
     random.shuffle(thenew)  # 随机打乱一下
     for boardid, i in thenew:
         boardid, i = int(boardid), int(i)
-        if (boardid, i) not in workload:
+        if (boardid, i) not in workload: # 去重 不要爬取多次
             workload.add((boardid, i))
             m.put([boardid, i, ""])
     while time.time() - starttime < sleeptime and len(m) > 0:

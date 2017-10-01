@@ -341,8 +341,25 @@ def spyBoard_dict(boardid_dict, pages_input=None, sleeptime=86400, processes=2, 
 def spyBoard(boardid=182, pages_input=None, sleeptime=86400, processes=2, threads=2):
     spyBoard_dict([boardid], pages_input, sleeptime, processes, threads)
 
+myprint = lambda s:print("[{showtime}] {s}".format(showtime=time.strftime("%Y-%m-%d %H:%M:%S"),s=s))
 
-def spyNew(sleeptime=300, processes=5, threads=4):
+def plus1(filename):
+    """
+    文件内容为一个int，打开文件+1，写入
+    用于统计发生次数
+    """
+    try:
+        with open(filename,"r") as fp:
+            data = fp.read()
+        result = int(data)
+    except:
+        result = 0
+    result += 1
+    with open(filename,"w") as fp:
+        fp.write(str(result))
+    
+
+def spyNew(sleeptime=100, processes=5, threads=4):
     """
     对热门、新帖以及额外配置的板块列表进行监测，这是直接运行代码将调用的函数
     """
@@ -360,13 +377,22 @@ def spyNew(sleeptime=300, processes=5, threads=4):
             workload.add((boardid, i))
             m.put([boardid, i, ""])
     while time.time() - starttime < sleeptime and len(m) > 0:
-        print(
-            "[{showtime}] Remaning queue length: {len}".format(showtime=time.strftime("%Y-%m-%d %H:%M:%S"), len=len(m)))
-        sleep(1)
+        myprint("Remaning queue length: {len}".format(len=len(m)))
+        sleep(2)
+    myprint("All done! wait 5 seconds to clean up")
     sleep(5)
-    print("All done! sleep a while...")
-    sleep(max(0, starttime + sleeptime - time.time()))
+    myprint("Try close the queue... If this hang on, you have to kill the python process")
+    plus1("tryclose.log")
     m.close()
+    myprint("Try join the queue... If this hang on, you have to kill the python process")
+    plus1("tryjoin.log")
+    m.join()
+    plus1("join_success.log")
+    myprint("All child process exited succesfully")
+    sleeptime = max(0, starttime + sleeptime - time.time())
+    print("Sleep a while ( {sleeptime:.0f}s )...".format(sleeptime=sleeptime))
+    sleep(sleeptime)
+    myprint("Sleep done! wake up and exit...")
     return
 
 

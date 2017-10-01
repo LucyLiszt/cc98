@@ -1,12 +1,12 @@
 # coding:utf-8
-# stable version on 2017-09-15
+# dev(try redis) version on 2017-10-1, please use stable version on master branch
 
 from EasyLogin import EasyLogin  # 安装依赖：pip install bs4 requests pymysql
 from time import sleep
 from mpms import MPMS  # 虽然本项目里面已经包含mpms的代码，你也可以pip install mpms，项目地址：https://github.com/aploium/mpms
 from pprint import pprint, pformat
-import socket, requests, sys, pymysql, re, os, time, random
-from config import COOKIE, db, enable_multiple_ip, CONFIG_INTERESTING_BOARDS, CONFIG_IGNORE_POSTS
+import socket, requests, sys, pymysql, re, os, time, random, redis, traceback
+from config import COOKIE, db, redis_conn, enable_multiple_ip, CONFIG_INTERESTING_BOARDS, CONFIG_IGNORE_POSTS
 
 """
 欢迎阅读chenyuan写的cc98爬虫代码, 我假设你已经安装了以下软件/阅读了以下文档：
@@ -17,6 +17,8 @@ from config import COOKIE, db, enable_multiple_ip, CONFIG_INTERESTING_BOARDS, CO
 5) PyMySQL documentation: https://pymysql.readthedocs.io/en/latest/
 6) EasyLogin: 这个是我为了简化对requests和BeautifulSoup的调用而写的库 https://github.com/zjuchenyuan/EasyLogin
 7) mpms: 多进程多线程并发 https://github.com/aploium/mpms
+8) redis: 存储数据结构的内存NoSQL数据库
+9) redis python package: https://pypi.python.org/pypi/redis
 
 代码阅读建议：
     建议使用PyCharm(https://www.jetbrains.com/pycharm/)阅读python代码，哪里不懂按住Ctrl点哪里
@@ -65,7 +67,7 @@ else:
 DOMAIN = "http://www.cc98.org"  # 假设当前网络能访问到本域名
 
 conn = db()  # 建立数据库连接，如果数据库连接失败 不处理异常 直接退出
-
+myredis = redis_conn() # 建立redis连接
 
 def createTable(boardid, big=""):
     """
@@ -170,7 +172,7 @@ def getBoardSize(boardid):
     return int(size)
 
 
-def getBoardPage(boardid, page):
+def getBoardPage_detailed(boardid, page):
     """
     输入板块的boardid和第page页，返回该页的帖子列表 list类型 (帖子所在的板块id, 帖子id)
     提取对应的HTML是<a href='dispbbs.asp?boardID=182&ID=4725833&star=1&page=1'>
@@ -179,13 +181,29 @@ def getBoardPage(boardid, page):
     :param page: 第多少页，如1
     :return: 如[["182", "4725833"], ["182", "4726027"], ...]
     """
+    #global myredis
+    #redis_pipe = myredis.pipeline()
     a = EasyLogin(cookie=COOKIE)
     a.get("{}/list.asp?boardid={}&page={}".format(DOMAIN, boardid, page))
     result = set()
-    for i in a.getList("dispbbs.asp?boardID="):
-        result.add(getPart(i, "&ID=", "&"))
-    return [(boardid, i) for i in result]
+    for i in a.getList("dispbbs.asp?boardID=", returnType="element"):
+        if "topic_" not in i.get("id",""):
+            continue
+        body1 = i.find_next("td",{"class":"tablebody1"})
+        try:
+            reply, clicks = body1.text.strip().split("/")
+        except:
+            reply, clicks = str(-1), str(-1)
+        lastpost = body1.find_next("td",{"class":"tablebody2"}).find("a").text.strip()
+        postid = getPart(i["href"], "&ID=", "&")
+        result.add((postid, reply, clicks, lastpost))
+        #redis_pipe.set("reply_"+postid, reply).set("clicks_"+postid, clicks).set("lastpost_"+postid, lastpost)
+    #print(redis_pipe.execute())
+    return [(boardid, i[0], i[1], i[2], i[3]) for i in result]
 
+
+def getBoardPage(boardid, page):
+    return [(int(i[0]),int(i[1])) for i in getBoardPage_detailed(boardid, page)]
 
 def getBBS(boardid, id, big, morehint=False):
     """
@@ -199,10 +217,12 @@ def getBBS(boardid, id, big, morehint=False):
     :param morehint: 是否显示更多进度显示
     :return: [boardid, id, result, big] 作为handler的传入参数
     """
+    global myredis
     a = EasyLogin(cookie=COOKIE)
     result = []
     star = 1
     a.get("{}/dispbbs.asp?BoardID={}&id={}&star=1".format(DOMAIN, boardid, id))
+    myredis.incr("clicks_"+str(id))
     try:
         number = int(a.b.find("span", attrs={"id": "topicPagesNavigation"}).find(
             "b").text)  # 假设<span id="topicPagesNavigation">本主题贴数 <b>6</b>
@@ -218,6 +238,7 @@ def getBBS(boardid, id, big, morehint=False):
             if morehint:
                 print("page {star}".format(star=star))
             a.get("{}/dispbbs.asp?BoardID={}&id={}&star={}".format(DOMAIN, boardid, id, star))
+            myredis.incr("clicks_"+str(id))
         else:
             title = a.b.title.text.strip(" » CC98论坛")  # 帖子标题使用页面标题，假设页面标题的格式为"title &raquo; CC98论坛"
             result.append([0, "", title, "1970-01-01 08:00:01", "1970-01-01 08:00:01"])
@@ -359,23 +380,45 @@ def plus1(filename):
         fp.write(str(result))
     
 
+def filter_pass(boardid, postid, reply, clicks, lastpost):
+    global myredis, ignore_counts
+    redis_pipe = myredis.pipeline()
+    if (int(boardid), int(postid)) in CONFIG_IGNORE_POSTS:
+        return False# CONFIG_IGNORE_POSTS不会爬取
+    oldclicks = myredis.get("clicks_"+str(postid))
+    if bytes(clicks, encoding="utf-8") == oldclicks and clicks!="-1": # 如果点击量为-1表示这是投票贴 没有好方法只能强制抓取
+        ignore_counts += 1
+        return False
+    redis_pipe.set("reply_"+postid, reply).set("clicks_"+postid, clicks).set("lastpost_"+postid, lastpost).execute()
+    return True
+
 def spyNew(sleeptime=100, processes=5, threads=4):
     """
     对热门、新帖以及额外配置的板块列表进行监测，这是直接运行代码将调用的函数
     """
+    global ignore_counts
+    ignore_counts = 0
     starttime = time.time()
+    myprint("start")
     m = MPMS(getBBS, handler, processes=processes, threads_per_process=threads)
     t = 0
-    workload = set(CONFIG_IGNORE_POSTS)  # CONFIG_IGNORE_POSTS预先加入到workload，被视为已经爬取过就不会爬取
+    workload = set()
     thenew = getHotPost() + getNewPost()
-    for boardid in CONFIG_INTERESTING_BOARDS:
-        thenew += getBoardPage(int(boardid), 1)
-    random.shuffle(thenew)  # 随机打乱一下
-    for boardid, i in thenew:
-        boardid, i = int(boardid), int(i)
-        if (boardid, i) not in workload: # 去重 不要爬取多次
-            workload.add((boardid, i))
-            m.put([boardid, i, ""])
+    boardlist = set([int(i[0]) for i in thenew])
+    myprint("get new finished, len(thenew)={}, len(boardlist)={}".format(len(thenew),len(boardlist)))
+    boardlist.update(CONFIG_INTERESTING_BOARDS)
+    
+    newclicksdata = []
+    for boardid in boardlist:
+        newclicksdata += getBoardPage_detailed(boardid, 1)
+    
+    for boardid, postid, reply, clicks, lastpost in newclicksdata:
+        if filter_pass(boardid, postid, reply, clicks, lastpost):
+            if postid not in workload:
+                m.put([boardid, postid, ""])
+                workload.add(postid)
+    myprint("Check {} boards, ignore {} posts, using {} seconds".format(len(boardlist), ignore_counts, int(time.time()-starttime)))
+    
     while time.time() - starttime < sleeptime and len(m) > 0:
         myprint("Remaning queue length: {len}".format(len=len(m)))
         sleep(2)
@@ -478,6 +521,8 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("Quit!!!")
         os._exit(1)  # Attention! this does not terminate child process!
+    except Exception as e:
+        traceback.print_exc()
     finally:
         print("Quit!!!")
         os._exit(0)

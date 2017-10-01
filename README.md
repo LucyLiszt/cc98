@@ -38,11 +38,13 @@ util目录下py文件为方便管理用的一些代码，主要代码中不会im
 
 6. CONFIG_IGNORE_POSTS: 不爬取的帖子，举例:[(80,4354326),(152,4374762)]
 
+7. redis_conn(): function，返回一个Redis连接
+
 这是一个config.py的例子：
 
 ```
 #Example Code for config.py
-import random,pymysql
+import random,pymysql, redis
 COOKIE = {'aspsky':'SOMETHING CREDIENTIAL','BoardList':'BoardID=Show',}
 def db():
     global conn
@@ -53,6 +55,9 @@ enable_multiple_ip=False
 myip='10.1.2.{}'.format(random.randint(66,99))  #randomly choose a source ip for crawler
 CONFIG_INTERESTING_BOARDS = [] # only fetch hot and new topics, without any boards especially interested
 CONFIG_IGNORE_POSTS = [] # ignore nothing
+
+def redis_conn():
+    return redis.StrictRedis(host='localhost', port=6379, db=0)
 ```
 
 ### 建议在screen中运行

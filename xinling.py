@@ -250,7 +250,7 @@ def getBBS(boardid, id, big, morehint=False):
             myredis.incr("clicks_" + str(id))
         else:
             title = a.b.title.text.strip(" » CC98论坛")  # 帖子标题使用页面标题，假设页面标题的格式为"title &raquo; CC98论坛"
-            result.append([0, "", title, "1970-01-01 08:00:01", "1970-01-01 08:00:01"])
+            result.append([0, "", title, "1970-01-01 08:00:01", "1970-01-01 08:00:01"]) # dummy value fixed afterwards
             # print(title)
         for i in range(1, 11 if star != pages else lastpage + 1):  # 最后一页没有第lastpage+1个楼层
             # print(star,i)
@@ -292,6 +292,7 @@ def getBBS(boardid, id, big, morehint=False):
             # print(content)
             result.append([lc, user, content, posttime, lastedittime])
             # break
+        result[0][1], result[0][3], result[0][4] = result[1][1], result[1][3], result[1][4] # fix title user, posttime, edittime
     return [boardid, id, result, big]
 
 

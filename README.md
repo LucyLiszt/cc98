@@ -95,7 +95,7 @@ python3 xinling.py allboard
 
 我的方法是周期性将历史数据转移到`bigbbs_100`, 然后将所有的`bigbbs`表使用Mysql的MRG_MyISAM引擎来建立联合大表`data`，在`data`表中就可以进行全站搜索了
 
-具体代码和用到的SQL参见[update_big_data.py](update_big_data.py)
+具体代码和用到的SQL参见[util/update_big_data.py](util/update_big_data.py)
 
 ## Note
 
@@ -115,6 +115,6 @@ python3 xinling.py allboard
 
 ## 感谢
 
-https://github.com/aploium/mpms
+[https://github.com/aploium/mpms](https://github.com/aploium/mpms)
 
 ym一下Aploium大佬

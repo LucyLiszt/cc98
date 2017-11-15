@@ -11,7 +11,7 @@ import traceback
 from EasyLogin import EasyLogin  # 安装依赖：pip install bs4 requests pymysql
 from pprint import pprint, pformat
 from time import sleep
-
+from bs4 import BeautifulSoup
 from config import COOKIE, db, redis_conn, enable_multiple_ip, CONFIG_INTERESTING_BOARDS, CONFIG_IGNORE_POSTS
 from mpms import MPMS  # 虽然本项目里面已经包含mpms的代码，你也可以pip install mpms，项目地址：https://github.com/aploium/mpms
 
@@ -230,7 +230,7 @@ def getBBS(boardid, id, big, morehint=False):
     a = EasyLogin(cookie=COOKIE)
     result = []
     star = 1
-    a.get("{}/dispbbs.asp?BoardID={}&id={}&star=1".format(DOMAIN, boardid, id))
+    html = a.get("{}/dispbbs.asp?BoardID={}&id={}&star=1".format(DOMAIN, boardid, id))
     myredis.incr("clicks_" + str(id))
     try:
         number = int(a.b.find("span", attrs={"id": "topicPagesNavigation"}).find(
@@ -246,22 +246,28 @@ def getBBS(boardid, id, big, morehint=False):
         if star != 1:
             if morehint:
                 print("page {star}".format(star=star))
-            a.get("{}/dispbbs.asp?BoardID={}&id={}&star={}".format(DOMAIN, boardid, id, star))
+            html = a.get("{}/dispbbs.asp?BoardID={}&id={}&star={}".format(DOMAIN, boardid, id, star))
             myredis.incr("clicks_" + str(id))
         else:
             title = a.b.title.text.strip(" » CC98论坛")  # 帖子标题使用页面标题，假设页面标题的格式为"title &raquo; CC98论坛"
             result.append([0, "", title, "1970-01-01 08:00:01", "1970-01-01 08:00:01"]) # dummy value fixed afterwards
             # print(title)
-        for i in range(1, 11 if star != pages else lastpage + 1):  # 最后一页没有第lastpage+1个楼层
+        floor_i = -1
+        i = 0
+        #for i in range(1, 11 if star != pages else lastpage + 1):  # 最后一页没有第lastpage+1个楼层
             # print(star,i)
-            lc = (star - 1) * 10 + i
-            floorstart = a.b.find("a", attrs={"name": "{}".format(i if i != 10 else 0)})
-            if floorstart is None:
-                result.append([lc, "98Deleter", ">>>No Content<<<", "1970-01-01 08:00:01", "1970-01-01 08:00:01"])
+        for floorpart in html.split("<!-- Execute Floor:"):
+            floor_i += 1
+            if floor_i == 0 or """<span style="color: red">热门回复""" in floorpart:
                 continue
+            i += 1
+            print(i)
+            floorpart = "<!-- Execute Floor:" + floorpart
+            soup = BeautifulSoup(floorpart, "html.parser")
+            
+            lc = (star - 1) * 10 + i
+            floorstart = soup.find("a")
             table = floorstart.next_sibling.next_sibling  # 假设楼层内容开始的table前都有<a name="1"></a>
-
-            # print(table)
             table_part2 = None
             lastedit = None
             for t in list(table.next_siblings)[0:20]:  # 由于BeautifulSoup太渣,事实上table还有一部分
@@ -497,7 +503,7 @@ if __name__ == "__main__":
     try:
         if len(sys.argv) > 1:
             if sys.argv[1] == "test":
-                test()
+                test(sys.argv[2], sys.argv[3])
             elif sys.argv[1] == "allboard":
                 CONFIG_INTERESTING_BOARDS = [513, 514, 515, 516, 517, 518, 519, 520, 7, 15, 16, 17, 19, 20, 21, 23, 535,
                                              25, 26, 538, 28, 537, 30, 540, 544, 545, 546, 36, 548, 549, 39, 551, 41,

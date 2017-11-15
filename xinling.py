@@ -261,7 +261,6 @@ def getBBS(boardid, id, big, morehint=False):
             if floor_i == 0 or """<span style="color: red">热门回复""" in floorpart:
                 continue
             i += 1
-            print(i)
             floorpart = "<!-- Execute Floor:" + floorpart
             soup = BeautifulSoup(floorpart, "html.parser")
             

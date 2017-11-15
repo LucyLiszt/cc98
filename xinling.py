@@ -218,7 +218,7 @@ def getBBS(boardid, id, big, morehint=False):
     """
     核心的获取帖子内容函数
     result为[楼层lc, 用户名user, 发帖内容content, 发帖时间posttime, 最后编辑时间lastedittime]
-    TODO: 发帖内容获取的不完整，丢失了回帖的标题信息
+    回帖的标题信息现在已经能获取，为保持之前数据的一致性，其楼层设置为负数
 
     :param boardid: 板块id
     :param id: 帖子id
@@ -292,7 +292,12 @@ def getBBS(boardid, id, big, morehint=False):
             #           </td>
 
             # print(posttime)
-            contentdiv = table.find('article').find('div')
+            content_article = table.find('article')
+            content_b = content_article.find('b')
+            content_title = content_b.text.strip()
+            if content_title != "":
+                result.append([-lc, user, content_title, posttime, lastedittime])
+            contentdiv = content_article.find('div')
             content = contentdiv.text if contentdiv is not None else ">>>No Content<<<"
             # print(content)
             result.append([lc, user, content, posttime, lastedittime])

@@ -397,7 +397,7 @@ def plus1(filename):
     with open(filename, "w") as fp:
         fp.write(str(result))
 
-
+import random
 def filter_pass(boardid, postid, reply, clicks, lastpost):
     global myredis, ignore_counts
     redis_pipe = myredis.pipeline()
@@ -407,12 +407,23 @@ def filter_pass(boardid, postid, reply, clicks, lastpost):
     if bytes(clicks, encoding="utf-8") == oldclicks and clicks != "-1":  # 如果点击量为-1表示这是投票贴 没有好方法只能强制抓取
         ignore_counts += 1
         return False
+    if oldclicks is not None:
+        oldclicks_int = int(oldclicks.decode())
+        clicks_int = int(clicks)
+        if clicks_int - oldclicks_int < 2:
+            ignore_counts += 1
+            return False
+        oldlastpost = myredis.get("lastpost_" + str(postid))
+        if bytes(lastpost, encoding="utf-8") == oldlastpost:
+            if random.randint(0,100)>30:
+                ignore_counts += 1
+                return False
     redis_pipe.set("reply_" + postid, reply).set("clicks_" + postid, clicks).set("lastpost_" + postid,
                                                                                  lastpost).execute()
     return True
 
 
-def spyNew(sleeptime=100, processes=5, threads=4):
+def spyNew(sleeptime=100, processes=3, threads=3):
     """
     对热门、新帖以及额外配置的板块列表进行监测，这是直接运行代码将调用的函数
     """
